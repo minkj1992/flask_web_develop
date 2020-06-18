@@ -23,7 +23,6 @@
 <meta name="msapplication-TileColor" content="#ffffff">
 <meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
 <meta name="theme-color" content="#ffffff">
-
 {% endblock %}
 
 {% block navbar %}
@@ -51,4 +50,10 @@
 <div class="container">
     {% block page_content %}{% endblock %}
 </div>
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+{{ moment.include_moment() }}
 {% endblock %}
