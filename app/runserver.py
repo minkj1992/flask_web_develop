@@ -1,4 +1,4 @@
-from flask import Flask, render_template, session, redirect, url_for
+from flask import Flask, render_template, session, redirect, url_for, flash
 from flask_bootstrap import Bootstrap
 from flask_moment import Moment
 from flask_wtf import FlaskForm
@@ -33,6 +33,11 @@ def internal_server_error(error):
 def index():
     form = NameForm()  # when DI? proxy
     if form.validate_on_submit():  # return bool(request) and request.method in SUBMIT_METHODS
-        session['name'] = form.name.data
+        legacy_name = session.get('name')
+        if legacy_name != form.name.data:
+            flash('Your name is changed', category="success")
+            session['name'] = form.name.data
+        else:
+            flash('Looks like you already have that name!', category="warning")
         return redirect(url_for('index')) # Post/Redirect/Get (PRG) pattern
-    return render_template('index.html', form=form, name=session.get('name')) # .get우()은 찾을 수 없는 경우 None을 return하여 Error 방지 
+    return render_template('index.html', form=form, name=session.get('name')) # .get()은 찾을 수 없는 경우 None을 return하여 Error 방지
