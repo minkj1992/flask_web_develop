@@ -10,7 +10,7 @@ from wtforms import StringField, SubmitField
 from wtforms.validators import DataRequired
 from flask_script import Manager, Shell
 from flask_migrate import Migrate, MigrateCommand
-
+from flask_mail import Mail, Message
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -20,13 +20,22 @@ app.config['SQLALCHEMY_DATABASE_URI'] = \
     'sqlite:///' + os.path.join(basedir, 'data.sqlite')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['JEJULOG_MAIL_SUBJECT_PREFIX'] = '[Jejulog]'
+app.config['JEJULOG_MAIL_SENDER'] = 'Jejulog Admin <Jejulog@example.com>'
+app.config['JEJULOG_ADMIN'] = os.environ.get('JEJULOG_ADMIN')
+
 manager = Manager(app)
 csrf = CSRFProtect(app)  # wtf에서 제공하는 FlaskForm을 사용하지 않을 경우 global하게 csrf 보호
 bootstrap = Bootstrap(app)
 moment = Moment(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-
+mail = Mail(app)
 
 class Role(db.Model):
     __tablename__ = 'roles'
@@ -78,6 +87,14 @@ def _is_name_already_taken(name):
     return session['name'] == name
 
 
+def send_email(to, subject, template, **kwargs):
+    msg = Message(app.config['JEJULOG_MAIL_SUBJECT_PREFIX'] + ' ' + subject,
+                  sender=app.config['JEJULOG_MAIL_SENDER'], recipients=[to])
+    msg.body = render_template(template + '.txt', **kwargs)
+    msg.html = render_template(template + '.html', **kwargs)
+    mail.send(msg)
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     form = NameForm()  # when DI? proxy
@@ -90,6 +107,9 @@ def index():
             db.session.commit()
             session['known'] = False
             session['name'] = form.name.data
+            if app.config['JEJULOG_ADMIN']:
+                send_email(app.config['JEJULOG_ADMIN'], 'New User',
+                           'mail/new_user', user=user)
         else:
             session['known'] = True
             if _is_name_already_taken(form.name.data):
