@@ -27,7 +27,7 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True)
     # User 모델에 role 속성을 추가, 관계의 반대 방향을 정의, Role 모델이 외래키 대신 오브젝트에 접근하도록 role_id 대신 사용
-    users = db.relationship('User', backref='role')
+    users = db.relationship('User', backref='role', lazy='dynamic')
 
     def __repr__(self):
         return '<Role %r>' % self.name
@@ -58,16 +58,31 @@ def internal_server_error(error):
     return render_template('500.html'), 500
 
 
+def is_name_already_taken(name):
+    return session['name'] == name
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     form = NameForm()  # when DI? proxy
     if form.validate_on_submit():  # return bool(request) and request.method in SUBMIT_METHODS
-        legacy_name = session.get('name')
-        if legacy_name != form.name.data:
-            flash('Your name is changed', category="success")  # Jinja2에 넘겨진다, bootstrap alert class이름에 category명은 종속적
+
+        user = User.query.filter_by(username=form.name.data).first()
+        if user is None:
+            user = User(username=form.name.data)
+            db.session.add(user)
+            db.session.commit()
+            session['known'] = False
             session['name'] = form.name.data
         else:
-            flash('Looks like you already have that name!', category="warning")
+            session['known'] = True
+            if is_name_already_taken(form.name.data):
+                flash('You typed same name as before', category="warning")
+            else:
+                flash('Your name is successfully changed', category="success")
+                session['name'] = form.name.data
+
         return redirect(url_for('index'))  # Post/Redirect/Get (PRG) pattern
     return render_template('index.html', form=form,
-                           name=session.get('name'))  # .get()은 찾을 수 없는 경우 None을 return하여 Error 방지
+                           name=session.get('name', False),
+                           known=session.get('known', False))
