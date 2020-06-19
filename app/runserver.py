@@ -1,12 +1,16 @@
 import os
+
 from flask import Flask, render_template, session, redirect, url_for, flash
 from flask_bootstrap import Bootstrap
 from flask_moment import Moment
+from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
+from flask_wtf.csrf import CSRFProtect
 from wtforms import StringField, SubmitField
 from wtforms.validators import DataRequired
-from flask_wtf.csrf import CSRFProtect
-from flask_sqlalchemy import SQLAlchemy
+from flask_script import Manager, Shell
+from flask_migrate import Migrate, MigrateCommand
+
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -16,10 +20,12 @@ app.config['SQLALCHEMY_DATABASE_URI'] = \
     'sqlite:///' + os.path.join(basedir, 'data.sqlite')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+manager = Manager(app)
 csrf = CSRFProtect(app)  # wtf에서 제공하는 FlaskForm을 사용하지 않을 경우 global하게 csrf 보호
 bootstrap = Bootstrap(app)
 moment = Moment(app)
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 
 class Role(db.Model):
@@ -58,7 +64,17 @@ def internal_server_error(error):
     return render_template('500.html'), 500
 
 
-def is_name_already_taken(name):
+# @app.shell_context_processor
+def make_shell_context():
+    '''
+    DB 테스트를 위해 shell을 통해 모듈에 접근할 때마다, db app와 domain들을 매번 import하는 것은 불편하다.
+    이를 해결하기 위해 dict type으로 return하는 method에 @app.shell_context_processor를 wrap시키면
+    flask가 shell_context를 upload 시켜준다.
+    '''
+    return dict(app=app, db=db, User=User, Role=Role)
+
+
+def _is_name_already_taken(name):
     return session['name'] == name
 
 
@@ -76,7 +92,7 @@ def index():
             session['name'] = form.name.data
         else:
             session['known'] = True
-            if is_name_already_taken(form.name.data):
+            if _is_name_already_taken(form.name.data):
                 flash('You typed same name as before', category="warning")
             else:
                 flash('Your name is successfully changed', category="success")
@@ -86,3 +102,9 @@ def index():
     return render_template('index.html', form=form,
                            name=session.get('name', False),
                            known=session.get('known', False))
+
+
+if __name__ == '__main__':
+    manager.add_command('shell', Shell(make_context=make_shell_context))
+    manager.add_command('db', MigrateCommand)
+    manager.run()
